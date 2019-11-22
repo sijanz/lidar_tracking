@@ -35,6 +35,7 @@
 #include <visualization_msgs/Marker.h>
 #include <limits>
 #include <utility>
+#include <body_tracker_msgs/Skeleton.h>
 
 
 int g_cluster_min = 50;
@@ -50,6 +51,7 @@ cv::KalmanFilter kf1(stateDim, measDim, ctrlDim, CV_32F);
 cv::KalmanFilter kf2(stateDim, measDim, ctrlDim, CV_32F);
 
 ros::Publisher markerPub;
+ros::Publisher skeletonPub;
 
 std::vector<geometry_msgs::Point> prevClusterCenters;
 
@@ -147,8 +149,21 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
     }
 
     visualization_msgs::MarkerArray clusterMarkers;
+    std::vector<body_tracker_msgs::Skeleton> skeletons;
 
     for (int i = 0; i < 3; i++) {
+
+        auto skeleton{body_tracker_msgs::Skeleton{}};
+
+        skeleton.body_id = i;
+
+        geometry_msgs::Point clusterC(KFpredictions[i]);
+        skeleton.centerOfMass.x = clusterC.x * 1000;
+        skeleton.centerOfMass.y = clusterC.y * 1000;
+
+        skeletons.emplace_back(skeleton);
+
+
         visualization_msgs::Marker m;
 
         m.id = i;
@@ -163,13 +178,15 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
         m.color.g = i % 3 ? 1 : 0;
         m.color.b = i % 4 ? 1 : 0;
 
-        geometry_msgs::Point clusterC(KFpredictions[i]);
         m.pose.position.x = clusterC.x;
         m.pose.position.y = clusterC.y;
         m.pose.position.z = clusterC.z;
 
         clusterMarkers.markers.push_back(m);
     }
+
+    for (const auto& s : skeletons)
+        skeletonPub.publish(s);
 
     prevClusterCenters = clusterCenters;
 
@@ -480,6 +497,7 @@ int main(int argc, char** argv)
     // Create a ROS subscriber for the input point cloud
     ros::Subscriber sub = nh.subscribe("/velodyne_points", 1, cloud_cb);
     markerPub = nh.advertise<visualization_msgs::MarkerArray>("/markers", 1);
+    skeletonPub = nh.advertise<body_tracker_msgs::Skeleton>("/body_tracker/skeleton", 10);
 
     ros::spin();
 }

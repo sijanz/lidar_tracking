@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
         pcl_ros
         roscpp
         sensor_msgs
+        body_tracker_msgs
         )
 find_package(OpenCV REQUIRED)
 
