@@ -41,9 +41,7 @@ int g_cluster_min = 50;
 int g_cluster_max = 3000;
 double g_cluster_tolerance = 0.2;
 
-ros::Publisher objID_pub;
-
-// KF init
+// filter initialization
 int stateDim = 4;// [x,y,v_x,v_y]//,w,h]
 int measDim = 2;// [z_x,z_y,z_w,z_h]
 int ctrlDim = 0;
@@ -86,7 +84,7 @@ std::pair<int, int> findIndexOfMin(std::vector<std::vector<float> > distMat)
 }
 
 
-void KFT(const std_msgs::Float32MultiArray ccs)
+void KFT(const std_msgs::Float32MultiArray& ccs)
 {
 
     // First predict, to update the internal statePre variable
@@ -186,7 +184,7 @@ void KFT(const std_msgs::Float32MultiArray ccs)
     for (auto it = objID.begin(); it != objID.end(); it++)
         obj_id.data.push_back(*it);
     // Publish the object IDs
-    objID_pub.publish(obj_id);
+
     // convert clusterCenters from geometry_msgs::Point to floats
     std::vector<std::vector<float> > cc;
     for (int i = 0; i < 6; i++) {
@@ -227,18 +225,6 @@ void KFT(const std_msgs::Float32MultiArray ccs)
     if (!(meas5[0] == 0.0f || meas5[1] == 0.0f))
         cv::Mat estimated5 = KF5.correct(meas5Mat);
 }
-
-
-void publish_cloud(ros::Publisher& pub, pcl::PointCloud<pcl::PointXYZ>::Ptr cluster)
-{
-    sensor_msgs::PointCloud2::Ptr clustermsg(new sensor_msgs::PointCloud2);
-    pcl::toROSMsg(*cluster, *clustermsg);
-    clustermsg->header.frame_id = "/velodyne";
-    clustermsg->header.stamp = ros::Time::now();
-    pub.publish(*clustermsg);
-
-}
-
 
 bool hasHumanSize(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cluster)
 {
@@ -530,75 +516,6 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
         }
 
         KFT(cc);
-        /*
-        int i = 0;
-        bool publishedCluster[6];
-        for (auto it = objID.begin(); it != objID.end(); it++) { //cout<<"Inside the for loop\n";
-
-
-            switch (i) {
-                cout << "Inside the switch case\n";
-                case 0: {
-                    publish_cloud(pub_cluster0, cluster_vec[*it]);
-                    std::cout << "size of cluster 0: " << cluster_vec[*it]->points.size() << std::endl;
-                    std::cout << hasHumanSize(cluster_vec[*it]) << std::endl;
-                    publishedCluster[i] = true;//Use this flag to publish only once for a given obj ID
-                    i++;
-                    break;
-
-                }
-                case 1: {
-                    publish_cloud(pub_cluster1, cluster_vec[*it]);
-                    std::cout << "size of cluster 1: " << cluster_vec[*it]->points.size() << std::endl;
-                    std::cout << hasHumanSize(cluster_vec[*it]) << std::endl;
-                    publishedCluster[i] = true;//Use this flag to publish only once for a given obj ID
-                    i++;
-                    break;
-
-                }
-                case 2: {
-                    publish_cloud(pub_cluster2, cluster_vec[*it]);
-                    std::cout << "size of cluster 2: " << cluster_vec[*it]->points.size() << std::endl;
-                    std::cout << hasHumanSize(cluster_vec[*it]) << std::endl;
-                    publishedCluster[i] = true;//Use this flag to publish only once for a given obj ID
-                    i++;
-                    break;
-
-                }
-                case 3: {
-                    publish_cloud(pub_cluster3, cluster_vec[*it]);
-                    std::cout << "size of cluster 3: " << cluster_vec[*it]->points.size() << std::endl;
-                    std::cout << hasHumanSize(cluster_vec[*it]) << std::endl;
-                    publishedCluster[i] = true;//Use this flag to publish only once for a given obj ID
-                    i++;
-                    break;
-
-                }
-                case 4: {
-                    publish_cloud(pub_cluster4, cluster_vec[*it]);
-                    std::cout << "size of cluster 4: " << cluster_vec[*it]->points.size() << std::endl;
-                    std::cout << hasHumanSize(cluster_vec[*it]) << std::endl;
-                    publishedCluster[i] = true;//Use this flag to publish only once for a given obj ID
-                    i++;
-                    break;
-
-                }
-
-                case 5: {
-                    publish_cloud(pub_cluster5, cluster_vec[*it]);
-                    std::cout << "size of cluster 5: " << cluster_vec[*it]->points.size() << std::endl;
-                    std::cout << hasHumanSize(cluster_vec[*it]) << std::endl;
-                    publishedCluster[i] = true;//Use this flag to publish only once for a given obj ID
-                    i++;
-                    break;
-
-                }
-                default:
-                    break;
-            }
-
-        }
-        */
     }
 
 }
@@ -612,8 +529,7 @@ int main(int argc, char** argv)
 
     // Create a ROS subscriber for the input point cloud
     ros::Subscriber sub = nh.subscribe("/velodyne_points", 1, cloud_cb);
-
-    markerPub = nh.advertise<visualization_msgs::MarkerArray>("viz", 1);
+    markerPub = nh.advertise<visualization_msgs::MarkerArray>("/markers", 1);
 
     ros::spin();
 }
