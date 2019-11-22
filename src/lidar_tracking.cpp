@@ -38,14 +38,17 @@
 #include <body_tracker_msgs/Skeleton.h>
 
 
-int g_cluster_min = 50;
-int g_cluster_max = 3000;
-double g_cluster_tolerance = 0.2;
+// FIXME: get rid of globals
+
+int g_cluster_min{50};
+int g_cluster_max{3000};
+double g_cluster_tolerance{0.2};
 
 // filter initialization
-int stateDim = 4;// [x,y,v_x,v_y]//,w,h]
-int measDim = 2;// [z_x,z_y,z_w,z_h]
-int ctrlDim = 0;
+int stateDim{4};// [x,y,v_x,v_y]//,w,h]
+int measDim{2};// [z_x,z_y,z_w,z_h]
+int ctrlDim{0};
+
 cv::KalmanFilter kf0(stateDim, measDim, ctrlDim, CV_32F);
 cv::KalmanFilter kf1(stateDim, measDim, ctrlDim, CV_32F);
 cv::KalmanFilter kf2(stateDim, measDim, ctrlDim, CV_32F);
@@ -53,12 +56,12 @@ cv::KalmanFilter kf2(stateDim, measDim, ctrlDim, CV_32F);
 ros::Publisher markerPub;
 ros::Publisher skeletonPub;
 
-std::vector<geometry_msgs::Point> prevClusterCenters;
+std::vector<geometry_msgs::Point> g_prev_cluster_centers;
 
 
-std::vector<int> objID;// Output of the data association using KF
+std::vector<int> g_object_IDs;// Output of the data association using KF
 
-bool firstFrame = true;
+bool g_first_frame = true;
 
 // calculate euclidean distance of two points
 double euclidean_distance(geometry_msgs::Point& p1, geometry_msgs::Point& p2)
@@ -83,7 +86,7 @@ std::pair<int, int> findIndexOfMin(std::vector<std::vector<float> > distMat)
 }
 
 
-void KFT(const std_msgs::Float32MultiArray& ccs)
+void applyKalmanFiltering(const std_msgs::Float32MultiArray& ccs)
 {
 
     // First predict, to update the internal statePre variable
@@ -92,8 +95,7 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
 
     std::vector<geometry_msgs::Point> clusterCenters;//clusterCenters
 
-    int i = 0;
-    for (std::vector<float>::const_iterator it = ccs.data.begin(); it != ccs.data.end(); it += 3) {
+    for (auto it = ccs.data.begin(); it != ccs.data.end(); it += 3) {
         geometry_msgs::Point pt;
         pt.x = *it;
         pt.y = *(it + 1);
@@ -104,7 +106,6 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
     }
 
     std::vector<geometry_msgs::Point> KFpredictions;
-    i = 0;
     for (auto it = pred.begin(); it != pred.end(); it++) {
         geometry_msgs::Point pt;
         pt.x = (*it).at<float>(0);
@@ -116,8 +117,8 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
     }
 
     // Find the cluster that is more probable to be belonging to a given KF.
-    objID.clear();//Clear the objID vector
-    objID.resize(3);//Allocate default elements so that [i] doesnt segfault. Should be done better
+    g_object_IDs.clear();//Clear the objID vector
+    g_object_IDs.resize(3);//Allocate default elements so that [i] doesnt segfault. Should be done better
 
     // Copy clusterCentres for modifying it and preventing multiple assignments of the same ID
     std::vector<geometry_msgs::Point> copyOfClusterCenters(clusterCenters);
@@ -137,7 +138,7 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
         // 1. Find min(distMax)==> (i,j);
         std::pair<int, int> minIndex(findIndexOfMin(distMat));
         // 2. objID[i]=clusterCenters[j]; counter++
-        objID[minIndex.first] = minIndex.second;
+        g_object_IDs[minIndex.first] = minIndex.second;
 
         // 3. distMat[i,:]=10000; distMat[:,j]=10000
         distMat[minIndex.first] = std::vector<float>(3, 10000.0);// Set the row to a high number.
@@ -188,23 +189,23 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
     for (const auto& s : skeletons)
         skeletonPub.publish(s);
 
-    prevClusterCenters = clusterCenters;
+    g_prev_cluster_centers = clusterCenters;
 
     markerPub.publish(clusterMarkers);
 
 
     std_msgs::Int32MultiArray obj_id;
-    for (auto it = objID.begin(); it != objID.end(); it++)
-        obj_id.data.push_back(*it);
+    for (const auto& it : g_object_IDs)
+        obj_id.data.push_back(it);
     // Publish the object IDs
 
     // convert clusterCenters from geometry_msgs::Point to floats
     std::vector<std::vector<float> > cc;
     for (int i = 0; i < 3; i++) {
         std::vector<float> pt;
-        pt.push_back(clusterCenters[objID[i]].x);
-        pt.push_back(clusterCenters[objID[i]].y);
-        pt.push_back(clusterCenters[objID[i]].z);
+        pt.push_back(clusterCenters[g_object_IDs[i]].x);
+        pt.push_back(clusterCenters[g_object_IDs[i]].y);
+        pt.push_back(clusterCenters[g_object_IDs[i]].z);
 
         cc.push_back(pt);
     }
@@ -258,14 +259,14 @@ bool hasHumanSize(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cluster)
 void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
 {
     // If this is the first frame, initialize kalman filters for the clustered objects
-    if (firstFrame) {
+    if (g_first_frame) {
         // Initialize 6 Kalman Filters; Assuming 6 max objects in the dataset.
         // Could be made generic by creating a Kalman Filter only when a new object is detected
 
-        float dvx = 0.01f; //1.0
-        float dvy = 0.01f;//1.0
-        float dx = 1.0f;
-        float dy = 1.0f;
+        auto dvx{0.01};
+        auto dvy{0.01};
+        auto dx{1.0};
+        auto dy{1.0};
         kf0.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
         kf1.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
         kf2.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
@@ -275,16 +276,16 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
         cv::setIdentity(kf2.measurementMatrix);
 
         // Process Noise Covariance Matrix Q
-        float sigmaP = 0.01;
-        float sigmaQ = 0.1;
-        setIdentity(kf0.processNoiseCov, cv::Scalar::all(sigmaP));
-        setIdentity(kf1.processNoiseCov, cv::Scalar::all(sigmaP));
-        setIdentity(kf2.processNoiseCov, cv::Scalar::all(sigmaP));
+        auto sigma_p{0.01};
+        auto sigma_q{0.1};
+        setIdentity(kf0.processNoiseCov, cv::Scalar::all(sigma_p));
+        setIdentity(kf1.processNoiseCov, cv::Scalar::all(sigma_p));
+        setIdentity(kf2.processNoiseCov, cv::Scalar::all(sigma_p));
 
         // Meas noise cov matrix R
-        cv::setIdentity(kf0.measurementNoiseCov, cv::Scalar(sigmaQ));//1e-1
-        cv::setIdentity(kf1.measurementNoiseCov, cv::Scalar(sigmaQ));
-        cv::setIdentity(kf2.measurementNoiseCov, cv::Scalar(sigmaQ));
+        cv::setIdentity(kf0.measurementNoiseCov, cv::Scalar(sigma_q));//1e-1
+        cv::setIdentity(kf1.measurementNoiseCov, cv::Scalar(sigma_q));
+        cv::setIdentity(kf2.measurementNoiseCov, cv::Scalar(sigma_q));
 
         // Process the point cloud
         pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -297,8 +298,8 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
         tree->setInputCloud(input_cloud);
 
 
-        std::vector<pcl::PointIndices> cluster_indices;
-        pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+        auto cluster_indices{std::vector<pcl::PointIndices>{}};
+        auto ec{pcl::EuclideanClusterExtraction<pcl::PointXYZ>{}};
         ec.setClusterTolerance(g_cluster_tolerance);
         ec.setMinClusterSize(g_cluster_min);
         ec.setMaxClusterSize(g_cluster_max);
@@ -313,10 +314,10 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
         std::vector<int>::const_iterator pit;
 
         // Vector of cluster pointclouds
-        std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> cluster_vec;
+        auto cluster_vec{std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>{}};
 
         // Cluster centroids
-        std::vector<pcl::PointXYZ> clusterCentroids;
+        std::vector<pcl::PointXYZ> cluster_centroids;
 
         for (it = cluster_indices.begin(); it != cluster_indices.end(); ++it) {
 
@@ -333,7 +334,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
             }
 
 
-            pcl::PointXYZ centroid;
+            auto centroid{pcl::PointXYZ{}};
             centroid.x = x / numPts;
             centroid.y = y / numPts;
             centroid.z = 0.0;
@@ -341,51 +342,51 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
             cluster_vec.push_back(cloud_cluster);
 
             //Get the centroid of the cluster
-            clusterCentroids.push_back(centroid);
+            cluster_centroids.push_back(centroid);
         }
 
-        //Ensure at least 6 clusters exist to publish (later clusters may be empty)
+        // Ensure at least 3 clusters exist to publish (later clusters may be empty)
         while (cluster_vec.size() < 3) {
             pcl::PointCloud<pcl::PointXYZ>::Ptr empty_cluster(new pcl::PointCloud<pcl::PointXYZ>);
             empty_cluster->points.emplace_back(pcl::PointXYZ(0, 0, 0));
             cluster_vec.push_back(empty_cluster);
         }
 
-        while (clusterCentroids.size() < 3) {
-            pcl::PointXYZ centroid;
+        while (cluster_centroids.size() < 3) {
+            auto centroid{pcl::PointXYZ{}};
             centroid.x = 0.0;
             centroid.y = 0.0;
             centroid.z = 0.0;
 
-            clusterCentroids.push_back(centroid);
+            cluster_centroids.push_back(centroid);
         }
 
 
         // Set initial state
-        kf0.statePre.at<float>(0) = clusterCentroids.at(0).x;
-        kf0.statePre.at<float>(1) = clusterCentroids.at(0).y;
+        kf0.statePre.at<float>(0) = cluster_centroids.at(0).x;
+        kf0.statePre.at<float>(1) = cluster_centroids.at(0).y;
         kf0.statePre.at<float>(2) = 0;// initial v_x
         kf0.statePre.at<float>(3) = 0;//initial v_y
 
         // Set initial state
-        kf1.statePre.at<float>(0) = clusterCentroids.at(1).x;
-        kf1.statePre.at<float>(1) = clusterCentroids.at(1).y;
+        kf1.statePre.at<float>(0) = cluster_centroids.at(1).x;
+        kf1.statePre.at<float>(1) = cluster_centroids.at(1).y;
         kf1.statePre.at<float>(2) = 0;// initial v_x
         kf1.statePre.at<float>(3) = 0;//initial v_y
 
         // Set initial state
-        kf2.statePre.at<float>(0) = clusterCentroids.at(2).x;
-        kf2.statePre.at<float>(1) = clusterCentroids.at(2).y;
+        kf2.statePre.at<float>(0) = cluster_centroids.at(2).x;
+        kf2.statePre.at<float>(1) = cluster_centroids.at(2).y;
         kf2.statePre.at<float>(2) = 0;// initial v_x
         kf2.statePre.at<float>(3) = 0;//initial v_y
 
-        firstFrame = false;
+        g_first_frame = false;
 
         for (int i = 0; i < 6; i++) {
-            geometry_msgs::Point pt;
-            pt.x = clusterCentroids.at(i).x;
-            pt.y = clusterCentroids.at(i).y;
-            prevClusterCenters.push_back(pt);
+            auto pt{geometry_msgs::Point{}};
+            pt.x = cluster_centroids.at(i).x;
+            pt.y = cluster_centroids.at(i).y;
+            g_prev_cluster_centers.push_back(pt);
         }
 
     } else {
@@ -405,7 +406,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
          * cluster. Cluster_indices[0] contain all indices of the first cluster in input point cloud.
          */
         std::vector<pcl::PointIndices> cluster_indices;
-        pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+        auto ec{pcl::EuclideanClusterExtraction<pcl::PointXYZ>{}};
         ec.setClusterTolerance(g_cluster_tolerance);
         ec.setMinClusterSize(g_cluster_min);
         ec.setMaxClusterSize(g_cluster_max);
@@ -426,7 +427,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
         std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> cluster_vec;
 
         // Cluster centroids
-        std::vector<pcl::PointXYZ> clusterCentroids;
+        std::vector<pcl::PointXYZ> cluster_centroids;
 
 
         for (it = cluster_indices.begin(); it != cluster_indices.end(); ++it) {
@@ -446,7 +447,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
             }
 
             if (hasHumanSize(cloud_cluster)) {
-                pcl::PointXYZ centroid;
+                auto centroid{pcl::PointXYZ{}};
                 centroid.x = x / numPts;
                 centroid.y = y / numPts;
                 centroid.z = 0.0;
@@ -454,7 +455,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
                 cluster_vec.push_back(cloud_cluster);
 
                 //Get the centroid of the cluster
-                clusterCentroids.push_back(centroid);
+                cluster_centroids.push_back(centroid);
             }
         }
 
@@ -465,24 +466,23 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
             cluster_vec.push_back(empty_cluster);
         }
 
-        while (clusterCentroids.size() < 3) {
-            pcl::PointXYZ centroid;
+        while (cluster_centroids.size() < 3) {
+            auto centroid{pcl::PointXYZ{}};
             centroid.x = 0.0;
             centroid.y = 0.0;
             centroid.z = 0.0;
 
-            clusterCentroids.push_back(centroid);
+            cluster_centroids.push_back(centroid);
         }
 
-
-        std_msgs::Float32MultiArray cc;
+        auto cc{std_msgs::Float32MultiArray{}};
         for (int i = 0; i < 3; i++) {
-            cc.data.push_back(clusterCentroids.at(i).x);
-            cc.data.push_back(clusterCentroids.at(i).y);
-            cc.data.push_back(clusterCentroids.at(i).z);
+            cc.data.push_back(cluster_centroids.at(i).x);
+            cc.data.push_back(cluster_centroids.at(i).y);
+            cc.data.push_back(cluster_centroids.at(i).z);
         }
 
-        KFT(cc);
+        applyKalmanFiltering(cc);
     }
 
 }
@@ -490,12 +490,11 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
 
 int main(int argc, char** argv)
 {
-    // ROS init
-    ros::init(argc, argv, "kf_tracker");
+    ros::init(argc, argv, "lidar_tracking");
     ros::NodeHandle nh;
 
-    // Create a ROS subscriber for the input point cloud
     ros::Subscriber sub = nh.subscribe("/velodyne_points", 1, cloud_cb);
+
     markerPub = nh.advertise<visualization_msgs::MarkerArray>("/markers", 1);
     skeletonPub = nh.advertise<body_tracker_msgs::Skeleton>("/body_tracker/skeleton", 10);
 
