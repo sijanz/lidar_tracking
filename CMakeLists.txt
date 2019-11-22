@@ -1,16 +1,17 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(multi_object_tracking_lidar)
+project(lidar_tracking)
 
 set(CMAKE_CXX_FLAGS "-std=c++0x ${CMAKE_CXX_FLAGS}")
+add_compile_options(-std=c++11)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  pcl_ros
-  roscpp
-  sensor_msgs
-)
-find_package( OpenCV REQUIRED )
+        pcl_ros
+        roscpp
+        sensor_msgs
+        )
+find_package(OpenCV REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -82,10 +83,10 @@ find_package( OpenCV REQUIRED )
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES kf_tracker
-#  CATKIN_DEPENDS pck_ros roscpp sensor_msgs
-#  DEPENDS system_lib
+        #  INCLUDE_DIRS include
+        #  LIBRARIES kf_tracker
+        #  CATKIN_DEPENDS pck_ros roscpp sensor_msgs
+        #  DEPENDS system_lib
 )
 
 ###########
@@ -96,9 +97,9 @@ catkin_package(
 ## Your package locations should be listed before other locations
 # include_directories(include)
 include_directories(
-  ${catkin_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS}
-  include
+        ${catkin_INCLUDE_DIRS}
+        ${OpenCV_INCLUDE_DIRS}
+        include
 )
 
 
@@ -109,9 +110,9 @@ include_directories(
 
 ## Declare a cpp executable
 # add_executable(kf_tracker_node src/kf_tracker_node.cpp)
-add_executable( kf_tracker src/main.cpp )
-target_link_libraries ( kf_tracker ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
- 
+add_executable(lidar_tracking src/lidar_tracking.cpp)
+target_link_libraries(lidar_tracking ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
+
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 # add_dependencies(kf_tracker_node kf_tracker_generate_messages_cpp)
@@ -136,11 +137,11 @@ target_link_libraries ( kf_tracker ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
 # )
 
 ## Mark executables and/or libraries for installation
-install(TARGETS kf_tracker
-	ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-	LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-	RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+install(TARGETS lidar_tracking
+        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+        )
 
 ## Mark cpp header files for installation
 # install(DIRECTORY include/${PROJECT_NAME}/
