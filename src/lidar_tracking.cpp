@@ -45,12 +45,9 @@ double g_cluster_tolerance = 0.2;
 int stateDim = 4;// [x,y,v_x,v_y]//,w,h]
 int measDim = 2;// [z_x,z_y,z_w,z_h]
 int ctrlDim = 0;
-cv::KalmanFilter KF0(stateDim, measDim, ctrlDim, CV_32F);
-cv::KalmanFilter KF1(stateDim, measDim, ctrlDim, CV_32F);
-cv::KalmanFilter KF2(stateDim, measDim, ctrlDim, CV_32F);
-cv::KalmanFilter KF3(stateDim, measDim, ctrlDim, CV_32F);
-cv::KalmanFilter KF4(stateDim, measDim, ctrlDim, CV_32F);
-cv::KalmanFilter KF5(stateDim, measDim, ctrlDim, CV_32F);
+cv::KalmanFilter kf0(stateDim, measDim, ctrlDim, CV_32F);
+cv::KalmanFilter kf1(stateDim, measDim, ctrlDim, CV_32F);
+cv::KalmanFilter kf2(stateDim, measDim, ctrlDim, CV_32F);
 
 ros::Publisher markerPub;
 
@@ -89,7 +86,7 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
 
     // First predict, to update the internal statePre variable
 
-    std::vector<cv::Mat> pred{KF0.predict(), KF1.predict(), KF2.predict(), KF3.predict(), KF4.predict(), KF5.predict()};
+    std::vector<cv::Mat> pred{kf0.predict(), kf1.predict(), kf2.predict()};
 
     std::vector<geometry_msgs::Point> clusterCenters;//clusterCenters
 
@@ -118,15 +115,15 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
 
     // Find the cluster that is more probable to be belonging to a given KF.
     objID.clear();//Clear the objID vector
-    objID.resize(6);//Allocate default elements so that [i] doesnt segfault. Should be done better
+    objID.resize(3);//Allocate default elements so that [i] doesnt segfault. Should be done better
 
     // Copy clusterCentres for modifying it and preventing multiple assignments of the same ID
     std::vector<geometry_msgs::Point> copyOfClusterCenters(clusterCenters);
     std::vector<std::vector<float> > distMat;
 
-    for (int filterN = 0; filterN < 6; filterN++) {
+    for (int filterN = 0; filterN < 3; filterN++) {
         std::vector<float> distVec;
-        for (int n = 0; n < 6; n++) {
+        for (int n = 0; n < 3; n++) {
             distVec.push_back(euclidean_distance(KFpredictions[filterN], copyOfClusterCenters[n]));
         }
 
@@ -134,14 +131,14 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
     }
 
 
-    for (int clusterCount = 0; clusterCount < 6; clusterCount++) {
+    for (int clusterCount = 0; clusterCount < 3; clusterCount++) {
         // 1. Find min(distMax)==> (i,j);
         std::pair<int, int> minIndex(findIndexOfMin(distMat));
         // 2. objID[i]=clusterCenters[j]; counter++
         objID[minIndex.first] = minIndex.second;
 
         // 3. distMat[i,:]=10000; distMat[:,j]=10000
-        distMat[minIndex.first] = std::vector<float>(6, 10000.0);// Set the row to a high number.
+        distMat[minIndex.first] = std::vector<float>(3, 10000.0);// Set the row to a high number.
         for (int row = 0; row < distMat.size(); row++)//set the column to a high number
         {
             distMat[row][minIndex.second] = 10000.0;
@@ -151,7 +148,7 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
 
     visualization_msgs::MarkerArray clusterMarkers;
 
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 3; i++) {
         visualization_msgs::Marker m;
 
         m.id = i;
@@ -187,7 +184,7 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
 
     // convert clusterCenters from geometry_msgs::Point to floats
     std::vector<std::vector<float> > cc;
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 3; i++) {
         std::vector<float> pt;
         pt.push_back(clusterCenters[objID[i]].x);
         pt.push_back(clusterCenters[objID[i]].y);
@@ -199,31 +196,19 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
     float meas0[2] = {cc[0].at(0), cc[0].at(1)};
     float meas1[2] = {cc[1].at(0), cc[1].at(1)};
     float meas2[2] = {cc[2].at(0), cc[2].at(1)};
-    float meas3[2] = {cc[3].at(0), cc[3].at(1)};
-    float meas4[2] = {cc[4].at(0), cc[4].at(1)};
-    float meas5[2] = {cc[5].at(0), cc[5].at(1)};
 
 
     // The update phase 
     cv::Mat meas0Mat = cv::Mat(2, 1, CV_32F, meas0);
     cv::Mat meas1Mat = cv::Mat(2, 1, CV_32F, meas1);
     cv::Mat meas2Mat = cv::Mat(2, 1, CV_32F, meas2);
-    cv::Mat meas3Mat = cv::Mat(2, 1, CV_32F, meas3);
-    cv::Mat meas4Mat = cv::Mat(2, 1, CV_32F, meas4);
-    cv::Mat meas5Mat = cv::Mat(2, 1, CV_32F, meas5);
 
     if (!(meas0Mat.at<float>(0, 0) == 0.0f || meas0Mat.at<float>(1, 0) == 0.0f))
-        cv::Mat estimated0 = KF0.correct(meas0Mat);
+        cv::Mat estimated0 = kf0.correct(meas0Mat);
     if (!(meas1[0] == 0.0f || meas1[1] == 0.0f))
-        cv::Mat estimated1 = KF1.correct(meas1Mat);
+        cv::Mat estimated1 = kf1.correct(meas1Mat);
     if (!(meas2[0] == 0.0f || meas2[1] == 0.0f))
-        cv::Mat estimated2 = KF2.correct(meas2Mat);
-    if (!(meas3[0] == 0.0f || meas3[1] == 0.0f))
-        cv::Mat estimated3 = KF3.correct(meas3Mat);
-    if (!(meas4[0] == 0.0f || meas4[1] == 0.0f))
-        cv::Mat estimated4 = KF4.correct(meas4Mat);
-    if (!(meas5[0] == 0.0f || meas5[1] == 0.0f))
-        cv::Mat estimated5 = KF5.correct(meas5Mat);
+        cv::Mat estimated2 = kf2.correct(meas2Mat);
 }
 
 bool hasHumanSize(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cluster)
@@ -268,37 +253,25 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
         float dvy = 0.01f;//1.0
         float dx = 1.0f;
         float dy = 1.0f;
-        KF0.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
-        KF1.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
-        KF2.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
-        KF3.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
-        KF4.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
-        KF5.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
+        kf0.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
+        kf1.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
+        kf2.transitionMatrix = (cv::Mat_<float>(4, 4) << dx, 0, 1, 0, 0, dy, 0, 1, 0, 0, dvx, 0, 0, 0, 0, dvy);
 
-        cv::setIdentity(KF0.measurementMatrix);
-        cv::setIdentity(KF1.measurementMatrix);
-        cv::setIdentity(KF2.measurementMatrix);
-        cv::setIdentity(KF3.measurementMatrix);
-        cv::setIdentity(KF4.measurementMatrix);
-        cv::setIdentity(KF5.measurementMatrix);
+        cv::setIdentity(kf0.measurementMatrix);
+        cv::setIdentity(kf1.measurementMatrix);
+        cv::setIdentity(kf2.measurementMatrix);
 
         // Process Noise Covariance Matrix Q
         float sigmaP = 0.01;
         float sigmaQ = 0.1;
-        setIdentity(KF0.processNoiseCov, cv::Scalar::all(sigmaP));
-        setIdentity(KF1.processNoiseCov, cv::Scalar::all(sigmaP));
-        setIdentity(KF2.processNoiseCov, cv::Scalar::all(sigmaP));
-        setIdentity(KF3.processNoiseCov, cv::Scalar::all(sigmaP));
-        setIdentity(KF4.processNoiseCov, cv::Scalar::all(sigmaP));
-        setIdentity(KF5.processNoiseCov, cv::Scalar::all(sigmaP));
+        setIdentity(kf0.processNoiseCov, cv::Scalar::all(sigmaP));
+        setIdentity(kf1.processNoiseCov, cv::Scalar::all(sigmaP));
+        setIdentity(kf2.processNoiseCov, cv::Scalar::all(sigmaP));
 
         // Meas noise cov matrix R
-        cv::setIdentity(KF0.measurementNoiseCov, cv::Scalar(sigmaQ));//1e-1
-        cv::setIdentity(KF1.measurementNoiseCov, cv::Scalar(sigmaQ));
-        cv::setIdentity(KF2.measurementNoiseCov, cv::Scalar(sigmaQ));
-        cv::setIdentity(KF3.measurementNoiseCov, cv::Scalar(sigmaQ));
-        cv::setIdentity(KF4.measurementNoiseCov, cv::Scalar(sigmaQ));
-        cv::setIdentity(KF5.measurementNoiseCov, cv::Scalar(sigmaQ));
+        cv::setIdentity(kf0.measurementNoiseCov, cv::Scalar(sigmaQ));//1e-1
+        cv::setIdentity(kf1.measurementNoiseCov, cv::Scalar(sigmaQ));
+        cv::setIdentity(kf2.measurementNoiseCov, cv::Scalar(sigmaQ));
 
         // Process the point cloud
         pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -359,13 +332,13 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
         }
 
         //Ensure at least 6 clusters exist to publish (later clusters may be empty)
-        while (cluster_vec.size() < 6) {
+        while (cluster_vec.size() < 3) {
             pcl::PointCloud<pcl::PointXYZ>::Ptr empty_cluster(new pcl::PointCloud<pcl::PointXYZ>);
             empty_cluster->points.emplace_back(pcl::PointXYZ(0, 0, 0));
             cluster_vec.push_back(empty_cluster);
         }
 
-        while (clusterCentroids.size() < 6) {
+        while (clusterCentroids.size() < 3) {
             pcl::PointXYZ centroid;
             centroid.x = 0.0;
             centroid.y = 0.0;
@@ -376,41 +349,22 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
 
 
         // Set initial state
-        KF0.statePre.at<float>(0) = clusterCentroids.at(0).x;
-        KF0.statePre.at<float>(1) = clusterCentroids.at(0).y;
-        KF0.statePre.at<float>(2) = 0;// initial v_x
-        KF0.statePre.at<float>(3) = 0;//initial v_y
+        kf0.statePre.at<float>(0) = clusterCentroids.at(0).x;
+        kf0.statePre.at<float>(1) = clusterCentroids.at(0).y;
+        kf0.statePre.at<float>(2) = 0;// initial v_x
+        kf0.statePre.at<float>(3) = 0;//initial v_y
 
         // Set initial state
-        KF1.statePre.at<float>(0) = clusterCentroids.at(1).x;
-        KF1.statePre.at<float>(1) = clusterCentroids.at(1).y;
-        KF1.statePre.at<float>(2) = 0;// initial v_x
-        KF1.statePre.at<float>(3) = 0;//initial v_y
+        kf1.statePre.at<float>(0) = clusterCentroids.at(1).x;
+        kf1.statePre.at<float>(1) = clusterCentroids.at(1).y;
+        kf1.statePre.at<float>(2) = 0;// initial v_x
+        kf1.statePre.at<float>(3) = 0;//initial v_y
 
         // Set initial state
-        KF2.statePre.at<float>(0) = clusterCentroids.at(2).x;
-        KF2.statePre.at<float>(1) = clusterCentroids.at(2).y;
-        KF2.statePre.at<float>(2) = 0;// initial v_x
-        KF2.statePre.at<float>(3) = 0;//initial v_y
-
-
-        // Set initial state
-        KF3.statePre.at<float>(0) = clusterCentroids.at(3).x;
-        KF3.statePre.at<float>(1) = clusterCentroids.at(3).y;
-        KF3.statePre.at<float>(2) = 0;// initial v_x
-        KF3.statePre.at<float>(3) = 0;//initial v_y
-
-        // Set initial state
-        KF4.statePre.at<float>(0) = clusterCentroids.at(4).x;
-        KF4.statePre.at<float>(1) = clusterCentroids.at(4).y;
-        KF4.statePre.at<float>(2) = 0;// initial v_x
-        KF4.statePre.at<float>(3) = 0;//initial v_y
-
-        // Set initial state
-        KF5.statePre.at<float>(0) = clusterCentroids.at(5).x;
-        KF5.statePre.at<float>(1) = clusterCentroids.at(5).y;
-        KF5.statePre.at<float>(2) = 0;// initial v_x
-        KF5.statePre.at<float>(3) = 0;//initial v_y
+        kf2.statePre.at<float>(0) = clusterCentroids.at(2).x;
+        kf2.statePre.at<float>(1) = clusterCentroids.at(2).y;
+        kf2.statePre.at<float>(2) = 0;// initial v_x
+        kf2.statePre.at<float>(3) = 0;//initial v_y
 
         firstFrame = false;
 
@@ -491,13 +445,13 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
         }
 
         //Ensure at least 6 clusters exist to publish (later clusters may be empty)
-        while (cluster_vec.size() < 6) {
+        while (cluster_vec.size() < 3) {
             pcl::PointCloud<pcl::PointXYZ>::Ptr empty_cluster(new pcl::PointCloud<pcl::PointXYZ>);
             empty_cluster->points.emplace_back(pcl::PointXYZ(0, 0, 0));
             cluster_vec.push_back(empty_cluster);
         }
 
-        while (clusterCentroids.size() < 6) {
+        while (clusterCentroids.size() < 3) {
             pcl::PointXYZ centroid;
             centroid.x = 0.0;
             centroid.y = 0.0;
@@ -508,11 +462,10 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
 
 
         std_msgs::Float32MultiArray cc;
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 3; i++) {
             cc.data.push_back(clusterCentroids.at(i).x);
             cc.data.push_back(clusterCentroids.at(i).y);
             cc.data.push_back(clusterCentroids.at(i).z);
-
         }
 
         KFT(cc);
