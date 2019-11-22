@@ -163,7 +163,6 @@ void KFT(const std_msgs::Float32MultiArray& ccs)
         m.color.g = i % 3 ? 1 : 0;
         m.color.b = i % 4 ? 1 : 0;
 
-        //geometry_msgs::Point clusterC(clusterCenters.at(objID[i]));
         geometry_msgs::Point clusterC(KFpredictions[i]);
         m.pose.position.x = clusterC.x;
         m.pose.position.y = clusterC.y;
@@ -231,9 +230,6 @@ bool hasHumanSize(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cluster)
         });
 
         double area = (max_x - min_x) * (max_y - min_y);
-
-        // DEBUG
-        std::cout << area << std::endl;
 
         return area < 1.5;
 
@@ -432,16 +428,17 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr& input)
                 numPts++;
             }
 
-            pcl::PointXYZ centroid;
-            centroid.x = x / numPts;
-            centroid.y = y / numPts;
-            centroid.z = 0.0;
+            if (hasHumanSize(cloud_cluster)) {
+                pcl::PointXYZ centroid;
+                centroid.x = x / numPts;
+                centroid.y = y / numPts;
+                centroid.z = 0.0;
 
-            cluster_vec.push_back(cloud_cluster);
+                cluster_vec.push_back(cloud_cluster);
 
-            //Get the centroid of the cluster
-            clusterCentroids.push_back(centroid);
-
+                //Get the centroid of the cluster
+                clusterCentroids.push_back(centroid);
+            }
         }
 
         //Ensure at least 6 clusters exist to publish (later clusters may be empty)
